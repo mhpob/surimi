@@ -1,0 +1,334 @@
+---
+title: "Reading Fathom CSV Files"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reading Fathom CSV Files}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+In this vignette, we will compare reading a Fathom-style interleaved CSV file from Innovasea's Fathom Connect software using various implementations based on the `data.table` and `readr` package. 
+
+## Fathom CSV files
+
+CSV files exported using Innovasea's Fathom Connect software (Fathom CSVs) contain many types of interleaved data, such as detections, pings, temperature, noise, receiver tilt angle, and more! Fathom CSVs are begin with a header containing metadata associated with the software version and data types, followed by rows of data. The header is variable in length across receiver types and versions, but it is typically 20 or so rows long. Column names of the various data types are designated by a `_DESC` row, which is followed by the column names for that type. After the header, each row begins with a data type identifier (e.g., `DET` for detections, `TEMP` for temperature, etc.), followed by the relevant data.
+
+While these files contain a wealth of data, we usually want to to get to our detections as fast as possible. Reflecting this, we will try to import just the detections from a given file in our tests. This vignette and the speed tests within are based on the discussion in the GitHub issue [linked here](https://github.com/ocean-tracking-network/surimi/issues/28). This is admittedly a hodgepodge of different implementations that may or may not be "apples-to-apples" -- input and suggestions are always welcomed!
+
+We will compare `data.table`, `readr`, and `glatos` implementations. Note that `glatos` is `data.table`-based and leverages internal keys for type conversion and validation checks that are absent in raw `data.table` or `readr` methods. It also imports all data into a list by default.
+
+We are going to use a Fathom CSV file from an Innovasea NexTrak receiver that attached to [an issue filed in the actel package](https://github.com/hugomflavio/actel/issues/164).
+
+
+```{r}
+download.file(
+  "https://github.com/user-attachments/files/18086120/NexTrak-R1.801032.2024-10-25.093307.csv",
+  destfile = "NexTrak-R1.801032.2024-10-25.093307.csv"
+)
+fathom_csv <- "NexTrak-R1.801032.2024-10-25.093307.csv"
+```
+
+## `data.table`
+This section will compare various `data.table` methods, selecting the best one or two to test against other implementations. 
+```{r}
+dt <- function(fathom_csv, data_type = "DET"){
+  # Read the column names from the header
+  #   The "skip" argument will skip rows until it finds the row that starts with
+  #   the provided character string, "DET_DESC" for example
+  the_names <- as.character(
+    data.table::fread(
+      fathom_csv,
+      skip = paste0(data_type, "_DESC"),
+      nrows = 1, header = FALSE
+    )
+  )
+
+  # Read the data
+  #   Similarly, skip to the data using "DET,", for example
+  all_data <- data.table::fread(
+    fathom_csv,
+    skip = paste0(data_type, ","),
+    header = FALSE,
+    fill = TRUE
+  )[
+    # Select only the necessary columns
+    V1 == data_type, 1:length(the_names)
+  ]
+
+  data.table::setnames(all_data, the_names)
+  all_data
+}
+```
+
+### cmd
+
+ In addition to using the `skip` argument, we can use command-line tools to filter the file before reading it into R via the `cmd` argument. `grep` is a common tool for this purpose in UNIX-like (and some Windows) systems, while `FINDSTR` serves a similar purpose in Windows [since Windows 2000](https://en.wikipedia.org/wiki/Findstr). In order to be as operating-system agnostic as possible, we will use `grep` on MacOS and Linux, and `FINDSTR` on Windows.
+
+The command used in our example will be, on non-Windows:
+
+`grep "DET" "NexTrak-R1.801032.2024-10-25.093307.csv"`
+
+On Windows it will be:
+
+`FINDSTR "DET" "NexTrak-R1.801032.2024-10-25.093307.csv"`
+
+```{r}
+dt_import <- function(search_fun, data_type = "DET", fathom_csv) {
+    data.table::fread(
+    cmd = paste(
+      search_fun, 
+      paste0(data_type, ","),
+      fathom_csv
+    ),
+    header = FALSE,
+
+    # Need to grab the column names from the respective "x_DESC" row
+    col.names = {
+      as.character(
+        data.table::fread(
+          cmd = paste(
+            search_fun, paste0(data_type, "_DESC"), fathom_csv
+          ),
+          header = FALSE
+        )
+      )
+    }
+  )
+}
+```
+```{r}
+dt_checkos <- function(fathom_csv, data_type = "DET"){
+  # Check if the OS is Windows or other
+  search_fun <- ifelse(.Platform$OS.type == "windows", "FINDSTR", "grep")
+
+  dt_import(search_fun, data_type, fathom_csv)
+}
+```
+
+How much does it "cost" to check the operating system? To do this, we'll break out the individual functions for `grep` and `FINDSTR` so we can compare them directly.
+
+```{r}
+dt_grep <- function(fathom_csv, data_type = "DET"){
+  search_fun <- "grep"
+  dt_import(search_fun, data_type, fathom_csv)
+}
+
+dt_findstr <- function(fathom_csv, data_type = "DET"){
+  search_fun <- "FINDSTR"
+  dt_import(search_fun, data_type, fathom_csv)
+}
+```
+
+The functions above all use regular expressions for their matching, which can be a little slow. We can use literal matching instead, which is faster ("match this exactly" rather than "match something like this"). This is done by using the `-F` flag in `grep` and `/l` in `FINDSTR`, which treats the pattern as a fixed string rather than a regular expression.
+
+```{r}
+dt_checkos_fixed <- function(fathom_csv, data_type = "DET"){
+  search_fun <- ifelse(.Platform$OS.type == "windows", "FINDSTR /l", "grep -F")
+  dt_import(search_fun, data_type, fathom_csv)
+}
+dt_grep_fixed <- function(fathom_csv, data_type = "DET"){
+  search_fun <- "grep -F"
+  dt_import(search_fun, data_type, fathom_csv)
+}
+dt_findstr_fixed <- function(fathom_csv, data_type = "DET"){
+  search_fun <- "FINDSTR /l"
+  dt_import(search_fun, data_type, fathom_csv)
+}
+```
+
+### Class-safe
+Doing a quick check:
+
+```{r}
+dt_read <- dt(fathom_csv)
+dt_checkos_read <- dt_checkos(fathom_csv)
+
+identical(dt_read, dt_checkos_read)
+```
+
+Uh oh! What's the difference?
+
+```{r}
+head(dt_read)
+head(dt_checkos_read)
+```
+
+It looks like the difference here is the column classes. Take a look at the "Signal Strength (dB) column -- it is a character for `dt`-read data and a numeric for `dt_checkos`-read data. This is because `dt` is filtering the rows for the correct data type *after* the data have been read into R. This means that if a character string from a different data type appeared in the same column as something that is supposed to be a number in our chosen data type, the whole column will be read as a character. On the otherhand, pre-processing the data means that only our desired data are read in so numbers remain numbers.
+
+We can do a few things to address this: we can use `type.convert` to convert the columns to their appropriate types after reading the data or we can leverage the fast type conversion baked into `data.table::fread`. There are probably multiple ways to do the latter, but I'll try 1) writing the data to a temporary file, then read that back in; and 2) write a few lines to a temporary file, read that in to get the correct classes, then apply to the dataset.
+
+Option 1: Luckily, the first three columns will always have the same type: character (data type), POSIXct (device time), and POSIXct (time). This is good, as conversion to/from datetime is the thing that takes the longest in this process. To avoid date/time conversion, we'll skip the first three columns and convert the rest via `type.convert`. We could go out to the 7th column as offset, correction, model, and serial number will all be the same type, BUT the 4th column is "Time Offset (h)" which will usually be empty (NAs, so logical class). This should be integer if it eve has data, so starting at the 4th column will allow it to be caught.
+```{r}
+dt_typeconvert <- function(fathom_csv, data_type = "DET"){
+  selected_data <- dt(fathom_csv, data_type)
+
+  # Apply type.convert to column numbers 4+
+  selected_data[,
+    names(.SD) := lapply(.SD, type.convert, as.is = TRUE),
+    .SDcols = 4:ncol(selected_data)
+  ]
+
+  selected_data[]
+}
+```
+
+Now for the read-write-read options. The first writes the whole dataset to a temporary file and reads it back in. The second writes the first 5 rows to a temporary file, reads those in, and directly assigns classes accordingly. A risk associated with this is that a class may not make itself known until after the first five rows exported by `head`! This should be investigated.
+
+```{r}
+dt_write <- function(fathom_csv, data_type = "DET"){
+  selected_data <- dt(fathom_csv, data_type)
+
+  tf <- tempfile()
+  on.exit(unlink(tf))
+  data.table::fwrite(selected_data, tf)
+  data.table::fread(tf)
+
+}
+
+dt_write_head <- function(fathom_csv, data_type = "DET"){
+  selected_data <- dt(fathom_csv, data_type)
+
+  tf <- tempfile()
+  on.exit(unlink(tf))
+
+  data.table::fwrite(head(selected_data), tf)
+  classes <- data.table::fread(tf)
+  classes <- sapply(classes, class)
+
+  for(col in names(classes)[4:length(classes)]) {
+    data.table::set(
+      selected_data,
+      j = col,
+      value = as(selected_data[[col]], unlist(classes[col]))
+    )
+  }
+  selected_data[]
+}
+```
+
+### Testing
+Now let's run the test. This is being run on a Windows machine an Intel Core i5-8300H CPU @ 2.30GHz, 4 cores, and 32GB RAM. For a (currently) unknown reason, We're able to access `grep` while on this machine -- possibly due to an installation of RTools -- so all functions are able to run.
+
+```{r eval=FALSE}
+microbenchmark::microbenchmark(
+  dt(fathom_csv),
+  dt_checkos(fathom_csv),
+  dt_grep(fathom_csv),
+  dt_findstr(fathom_csv),
+  dt_checkos_fixed(fathom_csv),
+  dt_grep_fixed(fathom_csv),
+  dt_findstr_fixed(fathom_csv),
+  dt_typeconvert(fathom_csv),
+  dt_write(fathom_csv),
+  dt_write_head(fathom_csv)
+)
+```
+
+```{r eval=FALSE}
+Unit: milliseconds
+                         expr      min       lq     mean   median       uq       max neval    cld
+               dt(fathom_csv)  90.5667 103.1283 141.3253 128.0087 166.2165  286.6710   100 a     
+       dt_checkos(fathom_csv) 204.0254 220.3364 292.6562 257.1409 305.8297 1507.0597   100  bc   
+          dt_grep(fathom_csv) 243.5775 298.0347 349.1262 326.3130 372.7503  680.6552   100    de 
+       dt_findstr(fathom_csv) 205.4636 224.3673 301.8214 257.5904 323.5278 1266.3289   100   c e 
+ dt_checkos_fixed(fathom_csv) 205.4555 227.1081 295.1574 277.7395 326.8262  884.9248   100   c e 
+    dt_grep_fixed(fathom_csv) 228.4764 299.1642 369.4331 329.5935 385.3546 1246.4067   100    d
+ dt_findstr_fixed(fathom_csv) 203.7809 219.3450 279.3166 253.1551 299.9981  840.1722   100  bc
+   dt_typeconvert(fathom_csv) 634.5723 671.0946 811.7564 725.2193 905.0040 1350.9428   100      f
+         dt_write(fathom_csv) 182.2130 217.8576 283.2421 263.3594 328.4609  853.5426   100  bc   
+    dt_write_head(fathom_csv) 139.6842 177.0067 237.7833 209.4310 258.0583 1467.3348   100  b
+```
+
+To double check, we ran the same test on Linux, dual-booted on the same machine. Note that there's no `FINDSTR` in Linux, so we've removed those.
+```{r eval=FALSE}
+microbenchmark::microbenchmark(
+  dt(fathom_csv),
+  dt_checkos(fathom_csv),
+  dt_grep(fathom_csv),
+  dt_checkos_fixed(fathom_csv),
+  dt_grep_fixed(fathom_csv),
+  dt_typeconvert(fathom_csv),
+  dt_write(fathom_csv),
+  dt_write_head(fathom_csv)
+)
+```
+```{r eval=FALSE}
+Unit: milliseconds
+                         expr       min        lq      mean    median        uq      max neval   cld
+               dt(fathom_csv)  72.55104  82.60559  96.89345  90.34380 105.85625 144.8806   100 a    
+       dt_checkos(fathom_csv)  63.59126  66.22304  72.84989  70.27403  73.67968 124.4138   100  b   
+          dt_grep(fathom_csv)  63.35784  65.02633  73.86290  69.75704  74.90997 136.1526   100  b   
+ dt_checkos_fixed(fathom_csv)  63.19138  65.57212  72.88986  69.94372  74.73479 123.0885   100  b   
+    dt_grep_fixed(fathom_csv)  62.77446  64.63841  71.09863  67.41005  72.63305 117.7459   100  b   
+   dt_typeconvert(fathom_csv) 455.52885 488.17627 511.97337 508.21958 533.80712 605.7412   100   c  
+         dt_write(fathom_csv) 134.84801 150.41938 164.29174 157.80179 176.55645 216.2513   100    d 
+    dt_write_head(fathom_csv) 107.08407 118.79225 137.09028 128.73154 152.05810 222.5045   100     e
+```
+
+Some interesting and not straight-forward results! On a Linux operating system, all of the `grep`-based imports are significantly faster than other implementations. The type-unsafe implementation followed this, followed by the read-write-read `head` and read-write-read all. Using `type.convert` was notable slower than all other implementations.
+
+On the same machine's Windows operating system, the `FINDSTR` implementations were fastest and similar in speed to the read-write-read implementations, followed by `grep`. Again, using `type.convert` was the slowest.
+
+
+## `readr`
+We will use `readr::read_csv_chunked` to read the file in chunks. This will allow it to perform similarly to `data.table::fread` which is "chunked" across multiple threads by default.
+
+```{r}
+rdr <- function(fathom_csv, data_type = "DET") {
+  header_id <- paste0(data_type, "_DESC")
+  
+  header <- readr::read_lines(fathom_csv, n_max = 50)
+  header <- unlist(strsplit(grep(header_id, header, value = TRUE), ","))
+  
+  select_data <- function(x, pos){
+    x[grepl(
+      paste0("^", data_type, "$"),
+      eval(parse(text = paste0("x$", header_id)))
+    ),]
+  }
+  
+  dat <- readr::read_csv_chunked(
+    fathom_csv,
+    readr::DataFrameCallback$new(select_data),
+    col_names = header,
+    show_col_types = FALSE
+  )
+  suppressMessages(readr::type_convert(dat))
+}
+```
+
+## glatos
+```{r eval=FALSE}
+microbenchmark::microbenchmark(
+  dt(fathom_csv),
+  dt_checkos(fathom_csv),
+  dt_grep(fathom_csv),
+  dt_checkos_fixed(fathom_csv),
+  dt_grep_fixed(fathom_csv),
+  dt_typeconvert(fathom_csv),
+  dt_write(fathom_csv),
+  dt_write_head(fathom_csv),
+  glatos::read_vdat_csv(fathom_csv, "DET")
+)
+```
+
+```{r eval=FALSE}
+Unit: milliseconds
+                                     expr       min        lq      mean    median        uq      max neval   cld
+                           dt(fathom_csv)  70.23945  80.39204 108.49185  94.26403 113.91731 248.9685   100 a    
+                   dt_checkos(fathom_csv)  63.39454  65.49784  78.50016  67.85882  78.85538 208.3265   100  b   
+                      dt_grep(fathom_csv)  62.91586  65.38183  81.04417  66.77651  81.52834 273.2132   100  b   
+             dt_checkos_fixed(fathom_csv)  62.12537  65.49278  76.46652  69.03694  78.55827 192.7827   100  b   
+                dt_grep_fixed(fathom_csv)  62.82823  65.29071  76.08822  66.62572  80.71351 179.8656   100  b   
+               dt_typeconvert(fathom_csv) 440.11373 471.35790 506.68837 492.67052 530.70041 649.3236   100   c  
+                     dt_write(fathom_csv) 129.73338 150.39900 179.71500 162.20785 200.42431 344.7604   100    d 
+                dt_write_head(fathom_csv) 104.01869 124.95122 148.26665 133.78531 158.51121 340.0520   100     e
+ glatos::read_vdat_csv(fathom_csv, "DET") 435.64634 480.15513 523.51573 511.93118 550.07327 794.5443   100   c  
+```
