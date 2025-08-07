@@ -81,6 +81,15 @@ On Windows it will be:
 
 ```{r}
 dt_import <- function(search_fun, data_type = "DET", fathom_csv) {
+    the_names <- as.character(
+      data.table::fread(
+        fathom_csv,
+        skip = paste0(data_type, "_DESC"),
+        nrows = 1,
+        header = FALSE
+      )
+    )
+    
     data.table::fread(
     cmd = paste(
       search_fun, 
@@ -90,16 +99,7 @@ dt_import <- function(search_fun, data_type = "DET", fathom_csv) {
     header = FALSE,
 
     # Need to grab the column names from the respective "x_DESC" row
-    col.names = {
-      as.character(
-        data.table::fread(
-          cmd = paste(
-            search_fun, paste0(data_type, "_DESC"), fathom_csv
-          ),
-          header = FALSE
-        )
-      )
-    }
+    col.names = the_names
   )
 }
 ```
