@@ -6,10 +6,9 @@ fathom_csv <- "NexTrak-R1.802463.2025-07-02.152320.csv"
 
 
 read_fathom <- function(
-  fathom_csv,
-  data_type = "DET",
-  preprocess = FALSE
-) {
+    fathom_csv,
+    data_type = "DET",
+    preprocess = FALSE) {
   # Convert data_type to uppercase
   data_type <- toupper(data_type)
 
