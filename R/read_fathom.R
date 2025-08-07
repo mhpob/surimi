@@ -6,9 +6,11 @@ fathom_csv <- "NexTrak-R1.802463.2025-07-02.152320.csv"
 
 
 read_fathom <- function(
-    fathom_csv,
-    data_type = "DET",
-    preprocess = FALSE) {
+  fathom_csv,
+  data_type = "DET",
+  preprocess = FALSE
+) {
+  # Convert data_type to uppercase
   data_type <- toupper(data_type)
 
   # Grab the column names from the respective "x_DESC" row
@@ -40,7 +42,9 @@ read_fathom <- function(
       col.names = the_names
     )
   } else {
-    # Read the data by skipping to the data using "DET,", for example
+    # Read by skipping to the data using "<data_type>,"
+    #   Select only the necessary columns
+    #   Key by the first column for fast subsetting
     selected_data <- data.table::fread(
       file = fathom_csv,
       skip = paste0(data_type, ","),
@@ -50,29 +54,62 @@ read_fathom <- function(
       col.names = the_names,
       key = the_names[1]
     )[
-      # Select only the necessary columns
+      # Subset to the desired data type
       data_type
     ]
+    data.table::setkey(selected_data, NULL)
 
+    # Get ready to write to a temporary file to leverage data.table::fread's
+    #   fast type detection and conversion
     tf <- tempfile()
     on.exit(unlink(tf))
 
-    data.table::fwrite(
-      head(selected_data, 100),
-      file = tf,
-      logical01 = TRUE
-    )
-    classes <- data.table::fread(tf)
-    classes <- sapply(classes, class)
+    # Most data types have date/times only in the second and third columns
+    #   Cheat later by writing a subset to a temporary file, grabbing the
+    #   classes, and converting them directly.
+    # Some data types have random other date/time columns. Since they are
+    #   smaller, we'll read/write the whole thing.
 
-    for (col in names(classes)[4:length(classes)]) {
-      data.table::set(
+    ## TODO: check if it is faster to convert in R
+
+    if (
+      data_type %in%
+        c(
+          "CLOCK_REF",
+          "CLOCK_SET",
+          "EVENT_INIT",
+          "EVENT_OFFLOAD",
+          "HEALTH_VR2W",
+          "HEALTH_VR2AR",
+          "HEALTH_HR2",
+          "HEALTH_VR2TX"
+        )
+    ) {
+      data.table::fwrite(
         selected_data,
-        j = col,
-        value = as(selected_data[[col]], unlist(classes[col]))
+        file = tf,
+        logical01 = TRUE
       )
+      selected_data <- data.table::fread(tf)
+    } else {
+      # Use the cheat noted above for other (possibly larger) data types
+      data.table::fwrite(
+        head(selected_data, 100),
+        file = tf,
+        logical01 = TRUE
+      )
+      classes <- data.table::fread(tf)
+      classes <- sapply(classes, class)
+
+      for (col in names(classes)[4:length(classes)]) {
+        data.table::set(
+          selected_data,
+          j = col,
+          value = as(selected_data[[col]], unlist(classes[col]))
+        )
+      }
     }
-    data.table::setkey(selected_data, NULL)
+
     selected_data[]
   }
 }

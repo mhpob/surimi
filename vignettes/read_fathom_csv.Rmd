@@ -79,6 +79,15 @@ On Windows it will be:
 
 ``` r
 dt_import <- function(search_fun, data_type = "DET", fathom_csv) {
+    the_names <- as.character(
+      data.table::fread(
+        fathom_csv,
+        skip = paste0(data_type, "_DESC"),
+        nrows = 1,
+        header = FALSE
+      )
+    )
+    
     data.table::fread(
     cmd = paste(
       search_fun, 
@@ -88,16 +97,7 @@ dt_import <- function(search_fun, data_type = "DET", fathom_csv) {
     header = FALSE,
 
     # Need to grab the column names from the respective "x_DESC" row
-    col.names = {
-      as.character(
-        data.table::fread(
-          cmd = paste(
-            search_fun, paste0(data_type, "_DESC"), fathom_csv
-          ),
-          header = FALSE
-        )
-      )
-    }
+    col.names = the_names
   )
 }
 ```
@@ -161,199 +161,55 @@ Uh oh! What's the difference?
 
 ``` r
 head(dt_read)
-#>    DET_DESC   Device Time (UTC)
-#>      <char>              <POSc>
-#> 1:      DET 2024-08-20 19:26:05
-#> 2:      DET 2024-08-20 19:35:14
-#> 3:      DET 2024-08-20 19:35:30
-#> 4:      DET 2024-08-20 19:35:57
-#> 5:      DET 2024-08-20 19:36:18
-#> 6:      DET 2024-08-20 19:36:31
-#>                   Time
-#>                 <POSc>
-#> 1: 2024-08-20 19:26:05
-#> 2: 2024-08-20 19:35:14
-#> 3: 2024-08-20 19:35:30
-#> 4: 2024-08-20 19:35:57
-#> 5: 2024-08-20 19:36:18
-#> 6: 2024-08-20 19:36:31
-#>    Time Offset (h)
-#>             <lgcl>
-#> 1:              NA
-#> 2:              NA
-#> 3:              NA
-#> 4:              NA
-#> 5:              NA
-#> 6:              NA
-#>    Time Correction (s)      Model
-#>                  <num>     <char>
-#> 1:         0.000229744 NexTrak-R1
-#> 2:         0.005235959 NexTrak-R1
-#> 3:         0.005384263 NexTrak-R1
-#> 4:         0.005634050 NexTrak-R1
-#> 5:         0.005820198 NexTrak-R1
-#> 6:         0.005941884 NexTrak-R1
-#>    Serial Number Channel
-#>            <int>  <char>
-#> 1:        801032       1
-#> 2:        801032       1
-#> 3:        801032       1
-#> 4:        801032       1
-#> 5:        801032       1
-#> 6:        801032       1
-#>    Detection Type        Full ID
-#>            <char>         <char>
-#> 1:       PPM_SELF A69-1601-14074
-#> 2:            PPM  A69-9006-4357
-#> 3:            PPM  A69-9006-4332
-#> 4:            PPM  A69-9006-4339
-#> 5:       PPM_SELF A69-1601-14074
-#> 6:            PPM  A69-9006-4358
-#>        ID Raw Data
-#>    <char>    <num>
-#> 1:  14074       NA
-#> 2:   4357      156
-#> 3:   4332      107
-#> 4:   4339      204
-#> 5:  14074       NA
-#> 6:   4358       76
-#>    Transmitter Serial
-#>                 <int>
-#> 1:                 NA
-#> 2:                 NA
-#> 3:                 NA
-#> 4:                 NA
-#> 5:                 NA
-#> 6:                 NA
-#>    Signal Strength (dB) Noise (dB)
-#>                  <char>      <num>
-#> 1:                              NA
-#> 2:                  102       39.5
-#> 3:                 92.5       41.5
-#> 4:                 82.5       42.0
-#> 5:                              NA
-#> 6:                 91.5       40.0
-#>    Gain (dB) Quality Score
-#>       <lgcl>        <lgcl>
-#> 1:        NA            NA
-#> 2:        NA            NA
-#> 3:        NA            NA
-#> 4:        NA            NA
-#> 5:        NA            NA
-#> 6:        NA            NA
-#>    Station Name Latitude Longitude
-#>          <lgcl>   <lgcl>    <lgcl>
-#> 1:           NA       NA        NA
-#> 2:           NA       NA        NA
-#> 3:           NA       NA        NA
-#> 4:           NA       NA        NA
-#> 5:           NA       NA        NA
-#> 6:           NA       NA        NA
-#>    GPS HDOP
-#>      <lgcl>
-#> 1:       NA
-#> 2:       NA
-#> 3:       NA
-#> 4:       NA
-#> 5:       NA
-#> 6:       NA
+#>    DET_DESC   Device Time (UTC)                Time Time Offset (h) Time Correction (s)      Model
+#>      <char>              <POSc>              <POSc>          <lgcl>               <num>     <char>
+#> 1:      DET 2024-08-20 19:26:05 2024-08-20 19:26:05              NA         0.000229744 NexTrak-R1
+#> 2:      DET 2024-08-20 19:35:14 2024-08-20 19:35:14              NA         0.005235959 NexTrak-R1
+#> 3:      DET 2024-08-20 19:35:30 2024-08-20 19:35:30              NA         0.005384263 NexTrak-R1
+#> 4:      DET 2024-08-20 19:35:57 2024-08-20 19:35:57              NA         0.005634050 NexTrak-R1
+#> 5:      DET 2024-08-20 19:36:18 2024-08-20 19:36:18              NA         0.005820198 NexTrak-R1
+#> 6:      DET 2024-08-20 19:36:31 2024-08-20 19:36:31              NA         0.005941884 NexTrak-R1
+#>    Serial Number Channel Detection Type        Full ID     ID Raw Data Transmitter Serial
+#>            <int>  <char>         <char>         <char> <char>    <num>              <int>
+#> 1:        801032       1       PPM_SELF A69-1601-14074  14074       NA                 NA
+#> 2:        801032       1            PPM  A69-9006-4357   4357      156                 NA
+#> 3:        801032       1            PPM  A69-9006-4332   4332      107                 NA
+#> 4:        801032       1            PPM  A69-9006-4339   4339      204                 NA
+#> 5:        801032       1       PPM_SELF A69-1601-14074  14074       NA                 NA
+#> 6:        801032       1            PPM  A69-9006-4358   4358       76                 NA
+#>    Signal Strength (dB) Noise (dB) Gain (dB) Quality Score Station Name Latitude Longitude GPS HDOP
+#>                  <char>      <num>    <lgcl>        <lgcl>       <lgcl>   <lgcl>    <lgcl>   <lgcl>
+#> 1:                              NA        NA            NA           NA       NA        NA       NA
+#> 2:                  102       39.5        NA            NA           NA       NA        NA       NA
+#> 3:                 92.5       41.5        NA            NA           NA       NA        NA       NA
+#> 4:                 82.5       42.0        NA            NA           NA       NA        NA       NA
+#> 5:                              NA        NA            NA           NA       NA        NA       NA
+#> 6:                 91.5       40.0        NA            NA           NA       NA        NA       NA
 head(dt_checkos_read)
-#>    DET_DESC   Device Time (UTC)
-#>      <char>              <POSc>
-#> 1:      DET 2024-08-20 19:26:05
-#> 2:      DET 2024-08-20 19:35:14
-#> 3:      DET 2024-08-20 19:35:30
-#> 4:      DET 2024-08-20 19:35:57
-#> 5:      DET 2024-08-20 19:36:18
-#> 6:      DET 2024-08-20 19:36:31
-#>                   Time
-#>                 <POSc>
-#> 1: 2024-08-20 19:26:05
-#> 2: 2024-08-20 19:35:14
-#> 3: 2024-08-20 19:35:30
-#> 4: 2024-08-20 19:35:57
-#> 5: 2024-08-20 19:36:18
-#> 6: 2024-08-20 19:36:31
-#>    Time Offset (h)
-#>             <lgcl>
-#> 1:              NA
-#> 2:              NA
-#> 3:              NA
-#> 4:              NA
-#> 5:              NA
-#> 6:              NA
-#>    Time Correction (s)      Model
-#>                  <num>     <char>
-#> 1:         0.000229744 NexTrak-R1
-#> 2:         0.005235959 NexTrak-R1
-#> 3:         0.005384263 NexTrak-R1
-#> 4:         0.005634050 NexTrak-R1
-#> 5:         0.005820198 NexTrak-R1
-#> 6:         0.005941884 NexTrak-R1
-#>    Serial Number Channel
-#>            <int>   <int>
-#> 1:        801032       1
-#> 2:        801032       1
-#> 3:        801032       1
-#> 4:        801032       1
-#> 5:        801032       1
-#> 6:        801032       1
-#>    Detection Type        Full ID
-#>            <char>         <char>
-#> 1:       PPM_SELF A69-1601-14074
-#> 2:            PPM  A69-9006-4357
-#> 3:            PPM  A69-9006-4332
-#> 4:            PPM  A69-9006-4339
-#> 5:       PPM_SELF A69-1601-14074
-#> 6:            PPM  A69-9006-4358
-#>       ID Raw Data
-#>    <int>    <int>
-#> 1: 14074       NA
-#> 2:  4357      156
-#> 3:  4332      107
-#> 4:  4339      204
-#> 5: 14074       NA
-#> 6:  4358       76
-#>    Transmitter Serial
-#>                <lgcl>
-#> 1:                 NA
-#> 2:                 NA
-#> 3:                 NA
-#> 4:                 NA
-#> 5:                 NA
-#> 6:                 NA
-#>    Signal Strength (dB) Noise (dB)
-#>                   <num>      <num>
-#> 1:                   NA         NA
-#> 2:                102.0       39.5
-#> 3:                 92.5       41.5
-#> 4:                 82.5       42.0
-#> 5:                   NA         NA
-#> 6:                 91.5       40.0
-#>    Gain (dB) Quality Score
-#>       <lgcl>        <lgcl>
-#> 1:        NA            NA
-#> 2:        NA            NA
-#> 3:        NA            NA
-#> 4:        NA            NA
-#> 5:        NA            NA
-#> 6:        NA            NA
-#>    Station Name Latitude Longitude
-#>          <lgcl>   <lgcl>    <lgcl>
-#> 1:           NA       NA        NA
-#> 2:           NA       NA        NA
-#> 3:           NA       NA        NA
-#> 4:           NA       NA        NA
-#> 5:           NA       NA        NA
-#> 6:           NA       NA        NA
-#>    GPS HDOP
-#>      <lgcl>
-#> 1:       NA
-#> 2:       NA
-#> 3:       NA
-#> 4:       NA
-#> 5:       NA
-#> 6:       NA
+#>    DET_DESC   Device Time (UTC)                Time Time Offset (h) Time Correction (s)      Model
+#>      <char>              <POSc>              <POSc>          <lgcl>               <num>     <char>
+#> 1:      DET 2024-08-20 19:26:05 2024-08-20 19:26:05              NA         0.000229744 NexTrak-R1
+#> 2:      DET 2024-08-20 19:35:14 2024-08-20 19:35:14              NA         0.005235959 NexTrak-R1
+#> 3:      DET 2024-08-20 19:35:30 2024-08-20 19:35:30              NA         0.005384263 NexTrak-R1
+#> 4:      DET 2024-08-20 19:35:57 2024-08-20 19:35:57              NA         0.005634050 NexTrak-R1
+#> 5:      DET 2024-08-20 19:36:18 2024-08-20 19:36:18              NA         0.005820198 NexTrak-R1
+#> 6:      DET 2024-08-20 19:36:31 2024-08-20 19:36:31              NA         0.005941884 NexTrak-R1
+#>    Serial Number Channel Detection Type        Full ID    ID Raw Data Transmitter Serial
+#>            <int>   <int>         <char>         <char> <int>    <int>             <lgcl>
+#> 1:        801032       1       PPM_SELF A69-1601-14074 14074       NA                 NA
+#> 2:        801032       1            PPM  A69-9006-4357  4357      156                 NA
+#> 3:        801032       1            PPM  A69-9006-4332  4332      107                 NA
+#> 4:        801032       1            PPM  A69-9006-4339  4339      204                 NA
+#> 5:        801032       1       PPM_SELF A69-1601-14074 14074       NA                 NA
+#> 6:        801032       1            PPM  A69-9006-4358  4358       76                 NA
+#>    Signal Strength (dB) Noise (dB) Gain (dB) Quality Score Station Name Latitude Longitude GPS HDOP
+#>                   <num>      <num>    <lgcl>        <lgcl>       <lgcl>   <lgcl>    <lgcl>   <lgcl>
+#> 1:                   NA         NA        NA            NA           NA       NA        NA       NA
+#> 2:                102.0       39.5        NA            NA           NA       NA        NA       NA
+#> 3:                 92.5       41.5        NA            NA           NA       NA        NA       NA
+#> 4:                 82.5       42.0        NA            NA           NA       NA        NA       NA
+#> 5:                   NA         NA        NA            NA           NA       NA        NA       NA
+#> 6:                 91.5       40.0        NA            NA           NA       NA        NA       NA
 ```
 
 It looks like the difference here is the column classes. Take a look at the "Signal Strength (dB) column -- it is a character for `dt`-read data and a numeric for `dt_checkos`-read data. This is because `dt` is filtering the rows for the correct data type *after* the data have been read into R. This means that if a character string from a different data type appeared in the same column as something that is supposed to be a number in our chosen data type, the whole column will be read as a character. On the otherhand, pre-processing the data means that only our desired data are read in so numbers remain numbers.
